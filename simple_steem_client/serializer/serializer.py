@@ -1,3 +1,5 @@
+from simple_steem_client.serializer.operation_variants import operation_variants
+
 import math
 import time
 import datetime
@@ -158,8 +160,12 @@ class Serializer:
   def public_key(self, value):
     pass
 
-  def static_variant(self, value, typetuple):
-    pass
+  def static_variant(self, value, variants):
+    variant_select = getattr(value, "which")
+    for variant_def in variants:
+      if variant_def[0] == variant_select:
+        return self.fields(value, variant_def[1])
+    raise ArgumentError("Unknown which '%s' for static variant" % variant_select)
 
   def void(self, value):
     assert(value is None)
