@@ -35,6 +35,12 @@ class Serializer:
     self._data = bytearray(size)
     self._pos = 0
 
+  def _get_serializer_fn(self, name_or_lambda):
+    if type(name_or_lambda) is types.FunctionType:
+      return lambda v: name_or_lambda(self, v)
+    else:
+      return getattr(self, name_or_lambda)
+
   def _write_byte(self, value):
     self._data[self._pos] = value
     self._pos += 1
@@ -95,6 +101,7 @@ class Serializer:
     return self.uvarint((value << 1) ^ (value >> 63))
 
   def boolean(self, value):
+    assert(value in (True, False))
     encoded_value = 1 if value is True else 0
     return self.uint8(encoded_value)
 
@@ -120,22 +127,22 @@ class Serializer:
 
   def array(self, value, itemtype):
     bytes_written = self.uvarint(len(value))
-    item_serializer = getattr(self, itemtype)
+    item_serializer = self._get_serializer_fn(itemtype)
     for item in value:
       bytes_written += item_serializer(item)
     return bytes_written
      
   def map(self, value, keytype, valuetype):
     bytes_written = self.uvarint(len(value))
-    key_serializer = getattr(self, keytype)
-    value_serializer = getattr(self, valuetype)
+    key_serializer = self._get_serializer_fn(keytype)
+    value_serializer = self._get_serializer_fn(valuetype)
 
     for k, v in value.items():
       bytes_written += key_serializer(k) + value_serializer(v)
     return bytes_written
 
   def optional(self, value, underlyingtype):
-    underlying_serializer = getattr(self, underlyingtype)
+    underlying_serializer = self._get_serializer_fn(underlyingtype)
     if value is None:
       return self.uint8(0)
     else:
@@ -143,11 +150,7 @@ class Serializer:
 
   def field(self, value, name, fieldtype):
     field_val = getattr(value, name, None)
-    if type(fieldtype) is types.FunctionType:
-      return fieldtype(self, field_val)
-    else:
-      field_serializer = getattr(self, fieldtype)
-      return field_serializer(field_val)
+    return self._get_serializer_fn(fieldtype)(field_val)
 
   def fields(self, value, pairs):
     return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
