@@ -1,3 +1,8 @@
+def comment_options_extensions(s, v):
+  return s.extensions(v, (
+    ( "beneficiaries", lambda s2, v2: s2.array(v2, "beneficiary") ),
+  ))
+
 operation_variants = (
   (
     "vote",
@@ -115,13 +120,8 @@ operation_variants = (
       ("max_accepted_payout", "asset"),
       ("percent_steem_dollars", "uint32"),
       ("allow_votes", "boolean"),
-      ("allow_curation_rewards", "boolean")
-#      (
-#        "extensions",
-#        array(
-#          staticVariant((object((("beneficiaries", array(beneficiary))))))
-#        )
-#      )
+      ("allow_curation_rewards", "boolean"),
+      ("extensions", comment_options_extensions)
     )
   ),
   (

@@ -5,8 +5,4 @@ name = "pypi"
 
 [packages]
 
-coincurve = ">=6.0.0"
-"json-rpc" = ">=1.10.8"
-
-
 [dev-packages]

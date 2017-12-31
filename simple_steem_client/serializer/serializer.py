@@ -18,6 +18,15 @@ UINT64_MAX   = 0xFFFFFFFFFFFFFFFF
 BINARY64_RANGE = 2**53
 
 def twos(v, width):
+  """Converts an integer into its representation in twos' complement.
+
+  Args:
+    v (int): The number to convert.
+    width (int): The alignment of the integer. 1=8-bit, 2=16-bit, and so on.
+
+  Returns:
+    int: The two's complement of v.
+  """
   assert(width in (1,2,4,8))
   if v >= 0:
     return v
@@ -33,32 +42,40 @@ def twos(v, width):
     return UINT64_MAX-abs_v+1
 
 class Serializer:
+  """Converts dicts and objects into sequences of bytes as required by the STEEM blockchain.
+
+  STEEM uses a custom binary serialization format. All transactions on the blockchain must
+  be signed, and the signatures must be taken over the binary serialization of the transaction.
+
+  Some properties of the serialization format:
+    - All fixed-width integers and floating-point values are serialized little-endian.
+    - Variable-width integers follow Google's base-128 "varint" serialization.
+    - Variable-length sequences such as text strings, arrays, and maps are prefixed with a varint
+      indicating their length.
+  """
   def __init__(self, size=65536):
     self._data = bytearray(size)
     self._pos = 0
 
-  def _get_serializer_fn(self, name_or_lambda):
-    if type(name_or_lambda) is types.FunctionType:
-      return lambda v: name_or_lambda(self, v)
+  def _get_prop(self, value, prop):
+    if type(value) is dict:
+      return value.get(prop, None)
     else:
-      return getattr(self, name_or_lambda)
+      return getattr(value, prop, None)
+
+  def _get_serializer_fn(self, serializer_def):
+    assert(type(serializer_def) in (types.FunctionType, str, tuple))
+    if type(serializer_def) is types.FunctionType:
+      return lambda v: serializer_def(self, v)
+    elif type(serializer_def) is str:
+      return getattr(self, serializer_def)
+    elif type(serializer_def) is tuple:
+      return lambda v: self.fields(v, serializer_def)
 
   def _write_byte(self, value):
     self._data[self._pos] = value
     self._pos += 1
     return 1
-
-  def int8(self, value):
-    return self.uint8(twos(value, 1))
-
-  def int16(self, value):
-    return self.uint16(twos(value, 2))
-
-  def int32(self, value):
-    return self.uint32(twos(value, 4))
-
-  def int64(self, value):
-    return self.uint64(twos(value, 8)) 
 
   def uint8(self, value):
     return self._write_byte(value)
@@ -71,6 +88,18 @@ class Serializer:
 
   def uint64(self, value):
     return self.uint32(value & 0xffffffff) + self.uint32((value >> 32) & 0xffffffff)
+
+  def int8(self, value):
+    return self.uint8(twos(value, 1))
+
+  def int16(self, value):
+    return self.uint16(twos(value, 2))
+
+  def int32(self, value):
+    return self.uint32(twos(value, 4))
+
+  def int64(self, value):
+    return self.uint64(twos(value, 8)) 
 
   def binary64(self, value): 
     if math.isinf(value) and value < 0:
@@ -135,11 +164,23 @@ class Serializer:
     return bytes_written
      
   def map(self, value, keytype, valuetype):
+    """Serializes an object as an FC map.
+  
+    value can be either a dict or a list of (key, value) 2-tuples. The latter case
+    is supported in case the objects for the map are unhashable by Python.
+    """
     bytes_written = self.uvarint(len(value))
     key_serializer = self._get_serializer_fn(keytype)
     value_serializer = self._get_serializer_fn(valuetype)
 
-    for k, v in value.items():
+    if type(value) is dict:
+      iterator = value.items()
+    elif type(value) is list:
+      iterator = value
+    else:
+      raise ArgumentError("'map' serializer needs either a dict or a list of 2-tuples")
+
+    for k, v in iterator:
       bytes_written += key_serializer(k) + value_serializer(v)
     return bytes_written
 
@@ -151,28 +192,50 @@ class Serializer:
       return self.uint8(1) + underlying_serializer(value)
 
   def field(self, value, name, fieldtype):
-    field_val = getattr(value, name, None)
+    field_val = self._get_prop(value, name)
     return self._get_serializer_fn(fieldtype)(field_val)
 
   def fields(self, value, pairs):
-    return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
+    try:
+      return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
+    except ValueError as e:
+      print(pairs)
+      raise e
 
   def public_key(self, value):
-    pass
+    """Serializes a public key.
 
-  def static_variant(self, value, variants):
-    variant_select = getattr(value, "which")
-    for variant_def in variants:
-      if variant_def[0] == variant_select:
-        return self.fields(value, variant_def[1])
-    raise ArgumentError("Unknown which '%s' for static variant" % variant_select)
+    value must be either a bytes object containing the 65 bytes of a Bitcoin-type uncompressed public key,
+    including the 1-byte header, or else it must implement the `format` method, which must accept a
+    keyword argument `compressed` and should return the same. (This method signature is supplied by the
+    PublicKey object in the coincurve library.)
+    """
+    if type(value) is bytes:
+      return self.raw_bytes(value[1:])
+    elif hasattr(value, "format"):
+      return self.raw_bytes(value.format(compressed=False)[1:])
+
+  def static_variant(self, value, propname, variants):
+    assert(type(variants) in (list, tuple) and type(propname) is str)
+    variant_select = self._get_prop(value, propname)
+    for i, (variant_name, variant_def) in enumerate(variants):
+      if variant_name == variant_select: 
+        return self.uvarint(i) + self._get_serializer_fn(variant_def)(value)
+    raise ArgumentError("Unknown type '%s' for static variant '%s'" % variant_select)
+
+  def extensions(self, value, variants):
+    extension_variants = [(
+      variant_name, ( ( variant_name, variant_def ), )
+    ) for (variant_name, variant_def) in variants]
+
+    return self.array(value, lambda s, v: s.static_variant(v, "extension", extension_variants))
 
   def void(self, value):
     assert(value is None)
     return 0
 
   def asset(self, value):
-    symbol = getattr(value, "symbol")
+    symbol = self._get_prop(value, "symbol")
     assert(len(symbol) < 8)
     encoded_symbol = bytearray(7)
     encoded_symbol[0:len(symbol)] = symbol.encode("utf8")
@@ -219,7 +282,7 @@ class Serializer:
     ))
 
   def operation(self, value):
-    raise NotImplementedError()
+    return self.static_variant(value, "type", operation_variants)
 
   def transaction(self, value):
     return self.fields(value, (
@@ -229,3 +292,27 @@ class Serializer:
       ( "operations", lambda s, v: s.array(v, "operation") ),
       ( "extensions", lambda s, v: s.array(v, "string") )
     ))
+
+  def flush(self):
+    """Returns the serializer's output and resets the serializer.
+    
+    This method allocates a new `bytes` object. If you wish to manage memory directly
+    you may prefer `flush_into`.
+
+    Returns:
+      bytes: The output of the serializer.
+    """
+    result = bytes(self._data[0:self._pos])
+    self._pos = 0
+    return result
+  
+  def flush_into(self, ba, offset=0):
+    """Writes the serializer's output into `ba` and resets the serializer.
+
+    Args:
+      ba (bytearray): The buffer to write the serializer's output into.
+      offset (int): The offset at which to start writing into `ba`. 
+    """
+    ba[offset:self._pos] = self._data[out_offset:self._pos]
+    self._pos = 0
+
