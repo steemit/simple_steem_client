@@ -114,17 +114,23 @@ class SteemRemoteBackend(object):
         if (method_args is not None) and (method_kwargs is not None):
             raise SteemIllegalArgument("Attempt to mix positional and keyword arguments")
         if self.appbase and (method_args is not None):
-            raise SteemIllegalArgument("Post-appbase cannot specify kwargs")
+            raise SteemIllegalArgument("Post-appbase cannot specify args")
         if (not self.appbase) and (method_kwargs is not None):
-            raise SteemIllegalArgument("Pre-appbase cannot specify args")
+            raise SteemIllegalArgument("Pre-appbase cannot specify kwargs")
 
         if len(self.nodes) == 0:
             raise SteemIllegalArgument("Must specify at least one node")
 
-        if self.appbase and (method_kwargs is None):
-            args = dict()
-        if (not self.appbase) and (method_args is None):
-            args = []
+        if self.appbase:
+            if method_kwargs is None:
+                args = dict()
+            else:
+                args = method_kwargs
+        else:
+            if method_args is None:
+                args = []
+            else:
+                args = method_args
 
         timeout = self.min_timeout
         retry_count = 0
