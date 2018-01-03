@@ -17,6 +17,9 @@ UINT64_MAX   = 0xFFFFFFFFFFFFFFFF
 
 BINARY64_RANGE = 2**53
 
+class ArgumentError(Exception):
+    pass
+
 def twos(v, width):
   """Converts an integer into its representation in twos' complement.
 
