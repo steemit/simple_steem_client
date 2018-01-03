@@ -153,6 +153,8 @@ class Serializer:
       return self.uint32(calendar.timegm(value))
     elif type(value) is datetime.datetime:
       return self.time_point_sec(value.timetuple())
+    elif type(value) is str:
+      return self.time_point_sec(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S"))
     else:
       raise ArgumentError("Cannot serialize to time_point_sec")
 
