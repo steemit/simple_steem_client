@@ -152,6 +152,9 @@ class Serializer:
   def string(self, value):
     return self.uvarint(len(value)) + self.raw_string(value)
 
+  def hex_string(self, value):
+    return self.raw_bytes(bytes.fromhex(value))
+
   def time_point_sec(self, value):
     if type(value) is time.struct_time:
       return self.uint32(calendar.timegm(value))
@@ -318,6 +321,16 @@ class Serializer:
       ( "expiration", "time_point_sec" ),
       ( "operations", lambda s, v: s.array(v, "operation") ),
       ( "extensions", lambda s, v: s.array(v, "string") )
+    ))
+
+  def signed_transaction(self, value):
+    return self.fields(value, (
+      ( "ref_block_num", "uint16" ),
+      ( "ref_block_prefix", "uint32" ),
+      ( "expiration", "time_point_sec" ),
+      ( "operations", lambda s, v: s.array(v, "operation") ),
+      ( "extensions", lambda s, v: s.array(v, "string") ),
+      ( "signatures", lambda s, v: s.array(v, "hex_string") ),
     ))
 
   def flush(self):
