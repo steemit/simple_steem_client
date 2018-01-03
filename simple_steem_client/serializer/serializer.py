@@ -5,6 +5,7 @@ import time
 import datetime
 import calendar
 import types
+import re
 
 NIF_FLOAT_64 = 0xfff0000000000000
 INF_FLOAT_64 = 0x7ff0000000000000
@@ -145,7 +146,7 @@ class Serializer:
     self._pos += l
     return l
 
-  def raw_string(self, value):    
+  def raw_string(self, value):
     return self.raw_bytes(bytes(value, "utf8"))
 
   def string(self, value):
@@ -242,16 +243,34 @@ class Serializer:
     assert(value is None)
     return 0
 
+  _re_amount = re.compile(r"^([0-9]{0,19})[.]([0-9]{0,19}) ([A-Z]+)$")
+  _allowed_symbol_prec = set([
+    ("STEEM", 3),
+    ("SBD", 3),
+    ("VESTS", 6),
+    ("TESTS", 3),
+    ("TBD", 3),
+    ])
+
   def asset(self, value):
-    symbol = self._get_prop(value, "symbol")
-    assert(len(symbol) < 8)
+    # new asset JSON form as list, see https://github.com/steemit/steem/issues/1937
+
+    assert(type(value) == str)
+
+    m = self._re_amount.match(value)
+    assert(m is not None)
+
+    lamount, ramount, symbol = m.groups()
+
+    prec = len(ramount)
+    assert( (symbol, prec) in self._allowed_symbol_prec )
+
     encoded_symbol = bytearray(7)
     encoded_symbol[0:len(symbol)] = symbol.encode("utf8")
 
-    return self.fields(value, (
-      ( "amount", "int64" ),
-      ( "precision", "int8" ),
-    )) + self.raw_bytes(encoded_symbol)
+    amount = int(ramount) + (10**prec) * int(lamount)
+
+    return self.uint64( amount ) + self.uint8( prec ) + self.raw_bytes( encoded_symbol )
 
   def authority(self, value):
     return self.fields(value, (
