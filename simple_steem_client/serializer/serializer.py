@@ -224,9 +224,9 @@ class Serializer:
     assert(type(variants) in (list, tuple) and type(propname) is str)
     variant_select = self._get_prop(value, propname)
     for i, (variant_name, variant_def) in enumerate(variants):
-      if variant_name == variant_select: 
+      if variant_name == variant_select:
         return self.uvarint(i) + self._get_serializer_fn(variant_def)(value)
-    raise ArgumentError("Unknown type '%s' for static variant '%s'" % variant_select)
+    raise ArgumentError("Unknown type for static variant (propname: %s, selector: %s)" % (propname, variant_select))
 
   def extensions(self, value, variants):
     extension_variants = [(
