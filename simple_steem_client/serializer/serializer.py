@@ -203,7 +203,7 @@ class Serializer:
   def fields(self, value, pairs):
     try:
       return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
-    except ValueError as e:
+    except Exception as e:
       print(pairs)
       raise e
 
