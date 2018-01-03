@@ -67,3 +67,9 @@ and server code.
 
 Explicit is better than implicit.  The user must always specify the
 URL of the `steemd` node(s) to connect to.
+
+# Testing
+
+```bash
+$ python -m unittest
+```
