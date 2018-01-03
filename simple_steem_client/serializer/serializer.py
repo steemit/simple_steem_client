@@ -220,20 +220,22 @@ class Serializer:
     elif hasattr(value, "format"):
       return self.raw_bytes(value.format(compressed=False)[1:])
 
-  def static_variant(self, value, propname, variants):
-    assert(type(variants) in (list, tuple) and type(propname) is str)
-    variant_select = self._get_prop(value, propname)
+  def static_variant(self, value, variants):
+    assert(type(value) in (list, tuple))
+    assert(len(value) == 2)
+    assert(type(variants) in (list, tuple))
+    variant_select = value[0]
     for i, (variant_name, variant_def) in enumerate(variants):
       if variant_name == variant_select:
-        return self.uvarint(i) + self._get_serializer_fn(variant_def)(value)
-    raise ArgumentError("Unknown type for static variant (propname: %s, selector: %s)" % (propname, variant_select))
+        return self.uvarint(i) + self._get_serializer_fn(variant_def)(value[1])
+    raise ArgumentError("Unknown type for static variant (selector: %s)" % (value[0],))
 
   def extensions(self, value, variants):
     extension_variants = [(
       variant_name, ( ( variant_name, variant_def ), )
     ) for (variant_name, variant_def) in variants]
 
-    return self.array(value, lambda s, v: s.static_variant(v, "extension", extension_variants))
+    return self.array(value, lambda s, v: s.static_variant(v, extension_variants))
 
   def void(self, value):
     assert(value is None)
@@ -287,7 +289,7 @@ class Serializer:
     ))
 
   def operation(self, value):
-    return self.static_variant(value, "type", operation_variants)
+    return self.static_variant(value, operation_variants)
 
   def transaction(self, value):
     return self.fields(value, (
