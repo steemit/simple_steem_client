@@ -309,24 +309,23 @@ class Serializer:
   def operation(self, value):
     return self.static_variant(value, operation_variants)
 
-  def transaction(self, value):
-    return self.fields(value, (
+  _transaction_fields = (
       ( "ref_block_num", "uint16" ),
       ( "ref_block_prefix", "uint32" ),
       ( "expiration", "time_point_sec" ),
       ( "operations", lambda s, v: s.array(v, "operation") ),
       ( "extensions", lambda s, v: s.array(v, "string") )
-    ))
+    )
+
+  _signed_transaction_fields = _transaction_fields + (
+      ( "signatures", lambda s, v: s.array(v, "hex_string") ),
+    )
+
+  def transaction(self, value):
+    return self.fields(value, self._transaction_fields)
 
   def signed_transaction(self, value):
-    return self.fields(value, (
-      ( "ref_block_num", "uint16" ),
-      ( "ref_block_prefix", "uint32" ),
-      ( "expiration", "time_point_sec" ),
-      ( "operations", lambda s, v: s.array(v, "operation") ),
-      ( "extensions", lambda s, v: s.array(v, "string") ),
-      ( "signatures", lambda s, v: s.array(v, "hex_string") ),
-    ))
+    return self.fields(value, self._signed_transaction_fields)
 
   def flush(self):
     """Returns the serializer's output and resets the serializer.
