@@ -201,16 +201,11 @@ class Serializer:
       return self.uint8(1) + underlying_serializer(value)
 
   def field(self, value, name, fieldtype):
-    print("processing field:", name)
     field_val = self._get_prop(value, name)
     return self._get_serializer_fn(fieldtype)(field_val)
 
   def fields(self, value, pairs):
-    try:
-      return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
-    except Exception as e:
-      print(pairs)
-      raise e
+    return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
 
   def public_key(self, value):
     """Serializes a public key.
