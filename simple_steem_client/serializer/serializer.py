@@ -1,5 +1,6 @@
 from simple_steem_client.serializer.operation_variants import operation_variants
 
+import collections
 import math
 import time
 import datetime
@@ -162,10 +163,10 @@ class Serializer:
     for item in value:
       bytes_written += item_serializer(item)
     return bytes_written
-     
+
   def map(self, value, keytype, valuetype):
     """Serializes an object as an FC map.
-  
+
     value can be either a dict or a list of (key, value) 2-tuples. The latter case
     is supported in case the objects for the map are unhashable by Python.
     """
@@ -173,7 +174,7 @@ class Serializer:
     key_serializer = self._get_serializer_fn(keytype)
     value_serializer = self._get_serializer_fn(valuetype)
 
-    if type(value) is dict:
+    if type(value) in (dict, collections.OrderedDict):
       iterator = value.items()
     elif type(value) is list:
       iterator = value

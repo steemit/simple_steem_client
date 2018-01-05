@@ -1,4 +1,5 @@
 
+import collections
 import math, unittest
 import time
 from datetime import datetime
@@ -202,11 +203,12 @@ class TestSerializer(unittest.TestCase):
 
   def test_map(self):
     self.assertEqual(self.s.map({}, 'string', 'string'), 1)
-    self.assertEqual(self.s.map({"foo":"bar", "baz":"quux"}, 'string', 'string'), 18)
+    d = collections.OrderedDict([["foo", "bar"], ["baz", "quux"]])
+    self.assertEqual(self.s.map(d, 'string', 'string'), 18)
 
     data = self.s.flush()
- 
-    self.assertEqual(len(data), 19)  
+
+    self.assertEqual(len(data), 19)
     self.assertEqual(data[0:1], hx("00"))
     self.assertEqual(data[1:2], hx("02"))
     self.assertEqual(data[2:3], hx("03"))
