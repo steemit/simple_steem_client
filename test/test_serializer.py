@@ -440,16 +440,10 @@ class TestSerializer(unittest.TestCase):
       ("extended", "boolean")
     )
 
-    self.assertEqual(self.s.extensions([{
-      "extension": "extended",
-      "extended": True
-    }, {
-      "extension": "users",
-      "users": [
-        "goldibex",
-        "ned"
-      ]
-    }], ext_variants), 18)
+    self.assertEqual(self.s.extensions(
+      [["extended", True],
+       ["users", ["goldibex", "ned"]]],
+      ext_variants), 18)
 
     self.assertEqual(self.s.flush(), hx("020101000208") + hs("goldibex") + hx("03") + hs("ned"))
 

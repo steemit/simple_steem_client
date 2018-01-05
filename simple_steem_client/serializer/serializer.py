@@ -231,11 +231,7 @@ class Serializer:
     raise ArgumentError("Unknown type for static variant (selector: %s)" % (value[0],))
 
   def extensions(self, value, variants):
-    extension_variants = [(
-      variant_name, ( ( variant_name, variant_def ), )
-    ) for (variant_name, variant_def) in variants]
-
-    return self.array(value, lambda s, v: s.static_variant(v, extension_variants))
+    return self.array(value, lambda s, v: s.static_variant(v, variants))
 
   def void(self, value):
     assert(value is None)
