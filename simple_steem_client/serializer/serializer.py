@@ -241,7 +241,7 @@ class Serializer:
     assert(value is None)
     return 0
 
-  _re_amount = re.compile(r"^([0-9]{0,19})[.]([0-9]{0,19}) ([A-Z]+)$")
+  _re_amount = re.compile(r"^([0-9]{0,19})[.]([0-9]{0,19}) (STEEM|SBD|VESTS|TESTS|TBD)$")
   _allowed_symbol_prec = set([
     ("STEEM", 3),
     ("SBD", 3),
