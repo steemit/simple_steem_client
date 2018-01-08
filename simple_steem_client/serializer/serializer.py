@@ -274,6 +274,17 @@ class Serializer:
       ( "witness_signature", "raw_bytes" )
     ))
 
+  def signed_block(self, value):
+    return self.fields(value, (
+      ( "previous", "raw_bytes" ),
+      ( "timestamp", "time_point_sec" ),
+      ( "witness", "string" ),
+      ( "transaction_merkle_root", "raw_bytes" ),
+      ( "extensions", lambda s, v: s.array(v, "void") ),
+      ( "witness_signature", "raw_bytes" ),
+      ( "transactions", lambda s, v: s.array(v, "signed_transaction") )
+    ))
+
   def chain_properties(self, value):
     return self.fields(value, (
       ( "account_creation_fee", "asset" ),
@@ -291,6 +302,16 @@ class Serializer:
       ( "expiration", "time_point_sec" ),
       ( "operations", lambda s, v: s.array(v, "operation") ),
       ( "extensions", lambda s, v: s.array(v, "string") )
+    ))
+
+  def signed_transaction(self, value):
+    return self.fields(value, (
+      ( "ref_block_num", "uint16" ),
+      ( "ref_block_prefix", "uint32" ),
+      ( "expiration", "time_point_sec" ),
+      ( "operations", lambda s, v: s.array(v, "operation") ),
+      ( "extensions", lambda s, v: s.array(v, "string") ),
+      ( "signatures", lambda s, v: s.array(v, "raw_bytes") )
     ))
 
   def flush(self):
