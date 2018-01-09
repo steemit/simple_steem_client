@@ -5,6 +5,7 @@ import time
 import datetime
 import calendar
 import types
+import re
 
 NIF_FLOAT_64 = 0xfff0000000000000
 INF_FLOAT_64 = 0x7ff0000000000000
@@ -16,6 +17,9 @@ UINT32_MAX   = 0xFFFFFFFF
 UINT64_MAX   = 0xFFFFFFFFFFFFFFFF
 
 BINARY64_RANGE = 2**53
+
+class ArgumentError(Exception):
+    pass
 
 def twos(v, width):
   """Converts an integer into its representation in twos' complement.
@@ -142,17 +146,22 @@ class Serializer:
     self._pos += l
     return l
 
-  def raw_string(self, value):    
+  def raw_string(self, value):
     return self.raw_bytes(bytes(value, "utf8"))
 
   def string(self, value):
     return self.uvarint(len(value)) + self.raw_string(value)
+
+  def hex_string(self, value):
+    return self.raw_bytes(bytes.fromhex(value))
 
   def time_point_sec(self, value):
     if type(value) is time.struct_time:
       return self.uint32(calendar.timegm(value))
     elif type(value) is datetime.datetime:
       return self.time_point_sec(value.timetuple())
+    elif type(value) is str:
+      return self.time_point_sec(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S"))
     else:
       raise ArgumentError("Cannot serialize to time_point_sec")
 
@@ -196,11 +205,7 @@ class Serializer:
     return self._get_serializer_fn(fieldtype)(field_val)
 
   def fields(self, value, pairs):
-    try:
-      return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
-    except ValueError as e:
-      print(pairs)
-      raise e
+    return sum([ self.field(value, name, fieldtype) for (name, fieldtype) in pairs ])
 
   def public_key(self, value):
     """Serializes a public key.
@@ -215,35 +220,51 @@ class Serializer:
     elif hasattr(value, "format"):
       return self.raw_bytes(value.format(compressed=False)[1:])
 
-  def static_variant(self, value, propname, variants):
-    assert(type(variants) in (list, tuple) and type(propname) is str)
-    variant_select = self._get_prop(value, propname)
+  def static_variant(self, value, variants):
+    assert(type(value) in (list, tuple))
+    assert(len(value) == 2)
+    assert(type(variants) in (list, tuple))
+    variant_select = value[0]
     for i, (variant_name, variant_def) in enumerate(variants):
-      if variant_name == variant_select: 
-        return self.uvarint(i) + self._get_serializer_fn(variant_def)(value)
-    raise ArgumentError("Unknown type '%s' for static variant '%s'" % variant_select)
+      if variant_name == variant_select:
+        return self.uvarint(i) + self._get_serializer_fn(variant_def)(value[1])
+    raise ArgumentError("Unknown type for static variant (selector: %s)" % (value[0],))
 
   def extensions(self, value, variants):
-    extension_variants = [(
-      variant_name, ( ( variant_name, variant_def ), )
-    ) for (variant_name, variant_def) in variants]
-
-    return self.array(value, lambda s, v: s.static_variant(v, "extension", extension_variants))
+    return self.array(value, lambda s, v: s.static_variant(v, variants))
 
   def void(self, value):
     assert(value is None)
     return 0
 
+  _re_amount = re.compile(r"^([0-9]{0,19})[.]([0-9]{0,19}) (STEEM|SBD|VESTS|TESTS|TBD)$")
+  _allowed_symbol_prec = set([
+    ("STEEM", 3),
+    ("SBD", 3),
+    ("VESTS", 6),
+    ("TESTS", 3),
+    ("TBD", 3),
+    ])
+
   def asset(self, value):
-    symbol = self._get_prop(value, "symbol")
-    assert(len(symbol) < 8)
+    # new asset JSON form as list, see https://github.com/steemit/steem/issues/1937
+
+    assert(type(value) == str)
+
+    m = self._re_amount.match(value)
+    assert(m is not None)
+
+    lamount, ramount, symbol = m.groups()
+
+    prec = len(ramount)
+    assert( (symbol, prec) in self._allowed_symbol_prec )
+
     encoded_symbol = bytearray(7)
     encoded_symbol[0:len(symbol)] = symbol.encode("utf8")
 
-    return self.fields(value, (
-      ( "amount", "int64" ),
-      ( "precision", "int8" ),
-    )) + self.raw_bytes(encoded_symbol)
+    amount = int(ramount) + (10**prec) * int(lamount)
+
+    return self.uint64( amount ) + self.uint8( prec ) + self.raw_bytes( encoded_symbol )
 
   def authority(self, value):
     return self.fields(value, (
@@ -282,16 +303,25 @@ class Serializer:
     ))
 
   def operation(self, value):
-    return self.static_variant(value, "type", operation_variants)
+    return self.static_variant(value, operation_variants)
 
-  def transaction(self, value):
-    return self.fields(value, (
+  _transaction_fields = (
       ( "ref_block_num", "uint16" ),
       ( "ref_block_prefix", "uint32" ),
       ( "expiration", "time_point_sec" ),
       ( "operations", lambda s, v: s.array(v, "operation") ),
       ( "extensions", lambda s, v: s.array(v, "string") )
-    ))
+    )
+
+  _signed_transaction_fields = _transaction_fields + (
+      ( "signatures", lambda s, v: s.array(v, "hex_string") ),
+    )
+
+  def transaction(self, value):
+    return self.fields(value, self._transaction_fields)
+
+  def signed_transaction(self, value):
+    return self.fields(value, self._signed_transaction_fields)
 
   def flush(self):
     """Returns the serializer's output and resets the serializer.
