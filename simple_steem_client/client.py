@@ -3,8 +3,10 @@
 
 import collections
 import json
+import logging
 import time
 import socket
+import sys
 import urllib.error
 import urllib.request
 
@@ -144,7 +146,7 @@ class SteemRemoteBackend(object):
                 ))
             req_json = self.json_encoder.encode(d)
             req_bytes = req_json.encode("ascii")
-            print("req:", req_bytes)
+            logging.info("req: %s", req_bytes)
 
             url = self.nodes[self.current_node]
             exc = None
@@ -154,14 +156,14 @@ class SteemRemoteBackend(object):
                     *self.urlopen_args, **self.urlopen_kwargs) as f:
                     resp_bytes = f.read()
             except urllib.error.HTTPError as e:
-                exc = e
+                exc = sys.exc_info()
             except urllib.error.URLError as e:
-                exc = e
+                exc = sys.exc_info()
             except socket.timeout as e:
-                exc = e
+                exc = sys.exc_info()
 
             if exc is not None:
-                print("got exception:", exc)
+                logging.error("caught exception in request", exc_info=exc)
                 retry_count += 1
                 if (self.max_retries == -1) or (retry_count <= self.max_retries):
                     self.sleep_function(timeout)
@@ -170,7 +172,7 @@ class SteemRemoteBackend(object):
                 if isinstance(exc, urllib.error.HTTPError):
                     raise SteemHTTPError(exc)
                 raise SteemNetworkError(exc)
-            print("resp:", resp_bytes)
+            logging.info("resp: %s", resp_bytes)
             resp_json = resp_bytes.decode("utf-8")
             resp = self.json_decoder.decode(resp_json)
             if "error" in resp:
